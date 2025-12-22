@@ -212,8 +212,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: av.r1035571.com
-      http:
+    - http:
         paths:
           - path: /api(/|$)(.*)
             pathType: ImplementationSpecific
@@ -222,19 +221,17 @@ spec:
                 name: av-api
                 port:
                   number: 8000
+
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: av-frontend-ingress
   namespace: av
-  annotations:
 spec:
   ingressClassName: nginx
-
   rules:
-    - host: av.r1035571.com
-      http:
+    - http:
         paths:
           - path: /
             pathType: Prefix
@@ -243,5 +240,6 @@ spec:
                 name: av-frontend
                 port:
                   number: 80
+
 
 
