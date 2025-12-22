@@ -1,0 +1,39 @@
+services:
+  av-db:
+    image: mariadb:11
+    container_name: av-db
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpass
+      MARIADB_DATABASE: webstack
+      MARIADB_USER: webuser
+      MARIADB_PASSWORD: webpass
+    volumes:
+      - av_db_data:/var/lib/mysql
+      - ./apps/db-init/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "3306:3306"
+
+  av-api:
+    build: ./apps/api-fastapi
+    container_name: av-api
+    environment:
+      DB_HOST: av-db
+      DB_PORT: "3306"
+      DB_USER: webuser
+      DB_PASSWORD: webpass
+      DB_NAME: webstack
+    depends_on:
+      - av-db
+    ports:
+      - "8000:8000"
+
+  av-frontend:
+    build: ./apps/frontend-lighttpd
+    container_name: av-frontend
+    depends_on:
+      - av-api
+    ports:
+      - "8080:80"
+
+volumes:
+  av_db_data:

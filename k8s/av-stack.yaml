@@ -1,0 +1,251 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: av
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: av-mariadb-secret
+  namespace: av
+type: Opaque
+stringData:
+  MARIADB_ROOT_PASSWORD: rootpass
+  MARIADB_DATABASE: webstack
+  MARIADB_USER: webuser
+  MARIADB_PASSWORD: webpass
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: av-db-init
+  namespace: av
+data:
+  init.sql: |
+    CREATE DATABASE IF NOT EXISTS webstack;
+    USE webstack;
+
+    CREATE TABLE IF NOT EXISTS settings (
+      id INT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
+    );
+
+    INSERT INTO settings (id, name)
+    VALUES (1, 'Andrei Vlaicu')
+    ON DUPLICATE KEY UPDATE name = VALUES(name);
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: av-db
+  namespace: av
+spec:
+  ports:
+    - port: 3306
+      targetPort: 3306
+  selector:
+    app: av-db
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: av-db
+  namespace: av
+spec:
+  serviceName: av-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: av-db
+  template:
+    metadata:
+      labels:
+        app: av-db
+    spec:
+      containers:
+        - name: mariadb
+          image: mariadb:11
+          ports:
+            - containerPort: 3306
+          envFrom:
+            - secretRef:
+                name: av-mariadb-secret
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: init
+          configMap:
+            name: av-db-init
+            items:
+              - key: init.sql
+                path: init.sql
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: av-api
+  namespace: av
+spec:
+  ports:
+    - port: 8000
+      targetPort: 8000
+  selector:
+    app: av-api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: av-api
+  namespace: av
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: av-api
+  template:
+    metadata:
+      labels:
+        app: av-api
+    spec:
+      containers:
+        - name: api
+          image: av-webstack-av-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+ 
+          
+          env:
+            - name: DB_HOST
+              value: av-db.av.svc.cluster.local
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: av-mariadb-secret
+                  key: MARIADB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: av-mariadb-secret
+                  key: MARIADB_PASSWORD
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: av-mariadb-secret
+                  key: MARIADB_DATABASE
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: av-frontend
+  namespace: av
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+  selector:
+    app: av-frontend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: av-frontend
+  namespace: av
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: av-frontend
+  template:
+    metadata:
+      labels:
+        app: av-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: av-webstack-av-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+---
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: av-api-ingress
+  namespace: av
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: av.r1035571.com
+      http:
+        paths:
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: av-api
+                port:
+                  number: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: av-frontend-ingress
+  namespace: av
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - av.r1035571.com
+      secretName: av-webstack-tls
+  rules:
+    - host: av.r1035571.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: av-frontend
+                port:
+                  number: 80
+
+
