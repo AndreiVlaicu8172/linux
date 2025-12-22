@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://github.com/AndreiVlaicu8172/linux.git
     targetRevision: main
-    path: k8s
+    path: k8s/stack
 
   destination:
     server: https://kubernetes.default.svc
