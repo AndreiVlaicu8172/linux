@@ -229,13 +229,9 @@ metadata:
   name: av-frontend-ingress
   namespace: av
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: nginx
-  tls:
-    - hosts:
-        - av.r1035571.com
-      secretName: av-webstack-tls
+
   rules:
     - host: av.r1035571.com
       http:
