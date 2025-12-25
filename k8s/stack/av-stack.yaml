@@ -109,7 +109,7 @@ metadata:
   name: av-api
   namespace: av
 spec:
-  replicas: 2
+  replicas: 3
   selector:
     matchLabels:
       app: av-api
